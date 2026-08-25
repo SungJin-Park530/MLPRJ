@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import joblib
+import math
 
 from sklearn.metrics import confusion_matrix, roc_curve, roc_auc_score
 
@@ -60,56 +61,122 @@ tab1, tab2 = st.tabs(["🔮 실시간 재실 예측", "📊 데이터 인사이�
 with tab1:
     st.subheader("센서 데이터 입력")
     
+    # 예측 결과가 표시될 영역을 미리 확보 (버튼 클릭 후 이 자리에 결과 렌더링)
+    result_placeholder = st.empty()
+    with result_placeholder.container():
+        col_res1, col_res2 = st.columns(2)
+        with col_res1:
+            st.info("⏳ **예측을 실행하면 여기에 결과가 표시됩니다.**")
+        with col_res2:
+            st.metric(label="재실 확률 (Occupancy Probability)", value="?%")
+        st.divider()
+    
     # 평가용 데이터셋을 참고하여 최소/최대 범위 파악
     X_sample, _ = load_sample_data()
     
-    # 1. 랜덤 데이터 생성 버튼
-    if st.button("🎲 랜덤 센서 값 불러오기"):
+    # 1. 예측 실행 버튼 & 랜덤 데이터 생성 버튼
+    col_btn1, col_btn2 = st.columns(2)
+    predict_clicked = col_btn1.button("재실 여부 예측 실행", type="primary")
+    if col_btn2.button("🎲 랜덤 센서 값 불러오기"):
         for feature in feature_names:
             min_val = float(X_sample[feature].min())
             max_val = float(X_sample[feature].max())
             # 세션 상태에 무작위 값 저장
             st.session_state[f"input_{feature}"] = round(np.random.uniform(min_val, max_val), 2)
             
-    # 2. 동적 입력 필드 생성
+    # 2. 센서 그룹별 동적 입력 필드 생성 (전체 2열 x 그룹 내부 2열 레이아웃)
     input_data = {}
-    col1, col2, col3 = st.columns(3)
+    sensor_groups = [
+        ("Temp", "🌡️ 온도"),
+        ("Light", "💡 조도"),
+        ("Sound", "🔊 소음"),
+        ("CO2", "🌫️ CO2"),
+        ("PIR", "🚶 적외선 감지 (PIR)"),
+    ]
+    # 온도-조도, 소음-CO2가 같은 행에 나란히 배치되고, PIR은 마지막 행에 단독 배치
+    group_pairs = [(sensor_groups[0], sensor_groups[1]), (sensor_groups[2], sensor_groups[3]), (sensor_groups[4], None)]
     
-    for idx, feature in enumerate(feature_names):
-        target_col = col1 if idx % 3 == 0 else col2 if idx % 3 == 1 else col3
+    # 화면 표시용 한글 라벨 (실제 데이터/컬럼명은 변경하지 않음)
+    korean_group_labels = {
+        "Temp": "온도",
+        "Light": "조도",
+        "Sound": "소음",
+        "PIR": "적외선 감지",
+    }
+    
+    def group_row_count(keyword):
+        return math.ceil(len([f for f in feature_names if keyword in f]) / 2)
+    
+    def render_sensor_group(keyword, group_title, target_rows):
+        group_features = [f for f in feature_names if keyword in f]
+        if not group_features:
+            return
         
-        # 세션에 저장된 값이 없으면 데이터셋의 평균값을 기본값으로 세팅
-        default_val = st.session_state.get(
-            f"input_{feature}", 
-            round(float(X_sample[feature].mean()), 2)
+        st.markdown(f"##### {group_title}")
+        icol1, icol2 = st.columns(2)
+        for idx, feature in enumerate(group_features):
+            target_col = icol1 if idx % 2 == 0 else icol2
+            
+            # 세션에 저장된 값이 없으면 데이터셋의 평균값을 기본값으로 세팅
+            default_val = st.session_state.get(
+                f"input_{feature}", 
+                round(float(X_sample[feature].mean()), 2)
+            )
+            
+            if keyword == "CO2":
+                display_label = "CO2 변화율" if "Slope" in feature else "CO2"
+            else:
+                display_label = f"{korean_group_labels[keyword]} {idx + 1}"
+            
+            input_data[feature] = target_col.number_input(
+                display_label, 
+                value=default_val,
+                key=f"input_{feature}", # session_state 연동용 key
+                step=0.1
+            )
+        
+        # 옆 영역보다 필드 수가 적어 낮은 경우, 높이를 맞추기 위한 여백 삽입
+        rows = math.ceil(len(group_features) / 2)
+        for _ in range(target_rows - rows):
+            icol1.markdown("<div style='height:68px'></div>", unsafe_allow_html=True)
+            icol2.markdown("<div style='height:68px'></div>", unsafe_allow_html=True)
+    
+    for pair_idx, (group_a, group_b) in enumerate(group_pairs):
+        if pair_idx > 0:
+            st.markdown("---")
+        
+        target_rows = max(
+            group_row_count(group_a[0]),
+            group_row_count(group_b[0]) if group_b else 0
         )
         
-        input_data[feature] = target_col.number_input(
-            f"{feature}", 
-            value=default_val,
-            key=f"input_{feature}", # session_state 연동용 key
-            step=0.1
-        )
+        outer_col1, outer_col2 = st.columns(2)
+        with outer_col1:
+            render_sensor_group(group_a[0], group_a[1], target_rows)
+        if group_b:
+            with outer_col2:
+                render_sensor_group(group_b[0], group_b[1], target_rows)
     
     # DataFrame 변환 및 컬럼 순서 맞춤
     input_df = pd.DataFrame([input_data])[feature_names]
     
-    st.divider()
-    
-    if st.button("재실 여부 예측 실행", type="primary"):
+    if predict_clicked:
         prediction = model.predict(input_df)[0]
         proba = model.predict_proba(input_df)[0][1]
         
-        col_res1, col_res2 = st.columns(2)
-        
-        with col_res1:
-            if prediction == 1:
-                st.error("🚨 **현재 상태: 재실 (Occupied)**")
-            else:
-                st.success("🍃 **현재 상태: 공실 (Not Occupied)**")
-                
-        with col_res2:
-            st.metric(label="재실 확률 (Occupancy Probability)", value=f"{proba * 100:.2f} %")
+        with result_placeholder.container():
+            col_res1, col_res2 = st.columns(2)
+            
+            with col_res1:
+                if prediction == 1:
+                    st.error("🚨 **현재 상태: 재실 (Occupied)**")
+                else:
+                    st.success("🍃 **현재 상태: 공실 (Not Occupied)**")
+                    
+            with col_res2:
+                st.metric(label="재실 확률 (Occupancy Probability)", value=f"{proba * 100:.2f} %")
+            st.divider()
+    # predict_clicked가 False인 경우, 위에서 미리 채운 안내 문구가 그대로 유지됨
 
 # ---------------------------------------------------------
 # Tab 2: 데이터 인사이트 대시보드 (Model Insight & Evaluation)
