@@ -49,7 +49,7 @@ except Exception as e:
 # ---------------------------------------------------------
 st.title("IoT 기반 실내 재실 여부 예측 시스템")
 
-tab1, tab2 = st.tabs(["🔮 실시간 재실 예측", "📊 모델 평가 시각화"])
+tab1, tab2 = st.tabs(["🔮 실시간 재실 예측", "📊 데이터 인사이트 대시보드"])
 
 # ---------------------------------------------------------
 # Tab 1: 실시간 재실 예측 (Real-time Prediction)
@@ -112,10 +112,10 @@ with tab1:
             st.metric(label="재실 확률 (Occupancy Probability)", value=f"{proba * 100:.2f} %")
 
 # ---------------------------------------------------------
-# Tab 2: 모델 평가 및 성능 분석 (Evaluation)
+# Tab 2: 데이터 인사이트 대시보드 (Model Insight & Evaluation)
 # ---------------------------------------------------------
 with tab2:
-    st.subheader("모델 성능 검증 시각화")
+    st.subheader("모델 성능 및 특성 인사이트")
     
     try:
         X_test, y_test = load_sample_data()
@@ -124,11 +124,11 @@ with tab2:
         y_pred = model.predict(X_test)
         y_proba = model.predict_proba(X_test)[:, 1]
         
-        col_graph1, col_graph2 = st.columns(2)
+        sub_tab1, sub_tab2, sub_tab3 = st.tabs(["1. 혼동 행렬", "2. ROC 곡선", "3. Feature Importance"])
         
         # 1) Confusion Matrix
-        with col_graph1:
-            st.markdown("**1. 혼동 행렬 (Confusion Matrix)**")
+        with sub_tab1:
+            st.caption("모델이 실제 재실/공실 여부를 얼마나 정확히 맞췄는지 보여주는 표입니다.")
             fig_cm, ax_cm = plt.subplots(figsize=(5, 4))
             cm = confusion_matrix(y_test, y_pred)
             sns.heatmap(
@@ -141,8 +141,8 @@ with tab2:
             st.pyplot(fig_cm)
             
         # 2) ROC Curve
-        with col_graph2:
-            st.markdown("**2. ROC 곡선 (ROC Curve)**")
+        with sub_tab2:
+            st.caption("분류 임계값 변화에 따른 모델의 판별 성능(AUC)을 나타내는 곡선입니다.")
             fig_roc, ax_roc = plt.subplots(figsize=(5, 4))
             fpr, tpr, _ = roc_curve(y_test, y_proba)
             auc_val = roc_auc_score(y_test, y_proba)
@@ -154,6 +154,15 @@ with tab2:
             ax_roc.legend(loc="lower right")
             ax_roc.grid(True, linestyle="--", alpha=0.3)
             st.pyplot(fig_roc)
+
+        # 3) Feature Importance
+        with sub_tab3:
+            st.caption("모델의 예측에 각 센서 피처가 얼마나 큰 영향을 미쳤는지 보여줍니다.")
+            importances = pd.Series(model.feature_importances_, index=feature_names).sort_values(ascending=True)
+            fig_fi, ax_fi = plt.subplots(figsize=(6, max(4, len(importances) * 0.4)))
+            ax_fi.barh(importances.index, importances.values, color='seagreen')
+            ax_fi.set_xlabel('Importance')
+            st.pyplot(fig_fi)
 
     except FileNotFoundError:
         st.warning("`iot_occupancy_data.csv` 데이터 파일을 찾을 수 없어 평가 시각화를 생략합니다.")
