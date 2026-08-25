@@ -93,8 +93,10 @@ with tab1:
         for feature in feature_names:
             min_val = float(X_sample[feature].min())
             max_val = float(X_sample[feature].max())
-            # 세션 상태에 무작위 값 저장
-            st.session_state[f"input_{feature}"] = round(np.random.uniform(min_val, max_val), 2)
+            # 세션 상태에 무작위 값 저장 (슬라이더가 있는 그룹은 슬라이더 상태도 함께 동기화)
+            random_val = round(np.random.uniform(min_val, max_val), 2)
+            st.session_state[f"input_{feature}"] = random_val
+            st.session_state[f"slider_{feature}"] = random_val
             
     # 2. 센서 그룹별 동적 입력 필드 생성 (전체 2열 x 그룹 내부 2열 레이아웃)
     input_data = {}
@@ -116,6 +118,37 @@ with tab1:
         "PIR": "적외선 감지",
     }
     
+    # 슬라이더를 제공할 그룹과 범위 (기존 데이터를 모두 포괄하는 상식적인 수준의 범위)
+    slider_ranges = {
+        "Temp": (15.0, 35.0),   # 실내 온도 상식 범위(°C), 실측 24.44~29.0 포괄
+        "Light": (0.0, 500.0),  # 실내 조도 상식 범위(lux), 실측 0~280 포괄
+    }
+    
+    # [낮음/보통/높음] 토글을 제공할 그룹과, 각 단계가 가리키는 최소~최대 구간 내 비율
+    level_options = ["낮음", "보통", "높음"]
+    level_ratios = {"낮음": 0.25, "보통": 0.50, "높음": 0.75}
+    level_toggle_groups = ("Sound", "CO2")
+    
+    def _sync_slider_to_input(feature):
+        st.session_state[f"input_{feature}"] = st.session_state[f"slider_{feature}"]
+    
+    def _sync_input_to_slider(feature):
+        st.session_state[f"slider_{feature}"] = st.session_state[f"input_{feature}"]
+    
+    def _apply_level(keyword, group_features):
+        level = st.session_state[f"level_{keyword}"]
+        if level is None:
+            return
+        ratio = level_ratios[level]
+        for feature in group_features:
+            # 데이터 개수와 무관하게, 최소~최대 구간을 비율로 나눈 위치의 값을 사용
+            min_val = float(X_sample[feature].min())
+            max_val = float(X_sample[feature].max())
+            base_val = min_val + ratio * (max_val - min_val)
+            # 동일한 단계를 선택해도 값이 약간 달라지도록 미세한 무작위 변동 추가
+            jittered_val = base_val + np.random.uniform(-0.05, 0.05) * base_val
+            st.session_state[f"input_{feature}"] = round(jittered_val, 2)
+    
     def group_row_count(keyword):
         return math.ceil(len([f for f in feature_names if keyword in f]) / 2)
     
@@ -125,7 +158,19 @@ with tab1:
             return
         
         st.markdown(f"##### {group_title}")
+        
+        if keyword in level_toggle_groups:
+            st.segmented_control(
+                "레벨 선택",
+                options=level_options,
+                key=f"level_{keyword}",
+                on_change=_apply_level,
+                args=(keyword, tuple(group_features)),
+                label_visibility="collapsed",
+            )
+        
         icol1, icol2 = st.columns(2)
+        has_slider = keyword in slider_ranges
         for idx, feature in enumerate(group_features):
             target_col = icol1 if idx % 2 == 0 else icol2
             
@@ -140,11 +185,31 @@ with tab1:
             else:
                 display_label = f"{korean_group_labels[keyword]} {idx + 1}"
             
+            target_col.markdown(f"**{display_label}**")
+            
+            if has_slider:
+                slider_min, slider_max = slider_ranges[keyword]
+                if f"slider_{feature}" not in st.session_state:
+                    st.session_state[f"slider_{feature}"] = min(max(default_val, slider_min), slider_max)
+                target_col.slider(
+                    display_label,
+                    min_value=slider_min,
+                    max_value=slider_max,
+                    step=0.1,
+                    key=f"slider_{feature}",
+                    on_change=_sync_slider_to_input,
+                    args=(feature,),
+                    label_visibility="collapsed",
+                )
+            
             input_data[feature] = target_col.number_input(
                 display_label, 
                 value=default_val,
                 key=f"input_{feature}", # session_state 연동용 key
-                step=0.1
+                step=0.1,
+                label_visibility="collapsed",
+                on_change=_sync_input_to_slider if has_slider else None,
+                args=(feature,) if has_slider else None,
             )
         
         # 옆 영역보다 필드 수가 적어 낮은 경우, 높이를 맞추기 위한 여백 삽입
@@ -205,10 +270,15 @@ with tab2:
         
         sub_tab1, sub_tab2, sub_tab3 = st.tabs(["1. 혼동 행렬", "2. ROC 곡선", "3. Feature Importance"])
         
+        # 이미지 크기 옵션 (선택 비율만큼 원본 figsize에 곱해 그래프 크기를 조절)
+        size_scale_map = {"50%": 0.5, "75%": 0.75, "100%": 1.0}
+        
         # 1) Confusion Matrix
         with sub_tab1:
             st.caption("모델이 실제 재실/공실 여부를 얼마나 정확히 맞췄는지 보여주는 표입니다.")
-            fig_cm, ax_cm = plt.subplots(figsize=(5, 4))
+            cm_size_option = st.segmented_control("이미지 크기", options=list(size_scale_map.keys()), default="50%", key="cm_size")
+            cm_scale = size_scale_map[cm_size_option]
+            fig_cm, ax_cm = plt.subplots(figsize=(5 * cm_scale, 4 * cm_scale))
             cm = confusion_matrix(y_test, y_pred)
             sns.heatmap(
                 cm, annot=True, fmt='d', cmap='Blues', cbar=False, ax=ax_cm,
@@ -217,12 +287,14 @@ with tab2:
             )
             ax_cm.set_xlabel('Predicted')
             ax_cm.set_ylabel('True')
-            st.pyplot(fig_cm)
+            st.pyplot(fig_cm, use_container_width=False)
             
         # 2) ROC Curve
         with sub_tab2:
             st.caption("분류 임계값 변화에 따른 모델의 판별 성능(AUC)을 나타내는 곡선입니다.")
-            fig_roc, ax_roc = plt.subplots(figsize=(5, 4))
+            roc_size_option = st.segmented_control("이미지 크기", options=list(size_scale_map.keys()), default="50%", key="roc_size")
+            roc_scale = size_scale_map[roc_size_option]
+            fig_roc, ax_roc = plt.subplots(figsize=(5 * roc_scale, 4 * roc_scale))
             fpr, tpr, _ = roc_curve(y_test, y_proba)
             auc_val = roc_auc_score(y_test, y_proba)
             
@@ -232,16 +304,18 @@ with tab2:
             ax_roc.set_ylabel('True Positive Rate')
             ax_roc.legend(loc="lower right")
             ax_roc.grid(True, linestyle="--", alpha=0.3)
-            st.pyplot(fig_roc)
+            st.pyplot(fig_roc, use_container_width=False)
 
         # 3) Feature Importance
         with sub_tab3:
             st.caption("모델의 예측에 각 센서 피처가 얼마나 큰 영향을 미쳤는지 보여줍니다.")
+            fi_size_option = st.segmented_control("이미지 크기", options=list(size_scale_map.keys()), default="50%", key="fi_size")
+            fi_scale = size_scale_map[fi_size_option]
             importances = pd.Series(model.feature_importances_, index=feature_names).sort_values(ascending=True)
-            fig_fi, ax_fi = plt.subplots(figsize=(6, max(4, len(importances) * 0.4)))
+            fig_fi, ax_fi = plt.subplots(figsize=(6 * fi_scale, max(4, len(importances) * 0.4) * fi_scale))
             ax_fi.barh(importances.index, importances.values, color='seagreen')
             ax_fi.set_xlabel('Importance')
-            st.pyplot(fig_fi)
+            st.pyplot(fig_fi, use_container_width=False)
 
     except FileNotFoundError:
         st.warning("`iot_occupancy_data.csv` 데이터 파일을 찾을 수 없어 평가 시각화를 생략합니다.")
