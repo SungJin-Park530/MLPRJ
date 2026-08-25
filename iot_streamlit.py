@@ -13,6 +13,18 @@ from sklearn.metrics import confusion_matrix, roc_curve, roc_auc_score
 # ---------------------------------------------------------
 st.set_page_config(page_title="IoT Occupancy Dashboard", layout="wide")
 
+# 전체 페이지 콘텐츠 영역의 최대 너비를 1000px로 제한
+st.markdown(
+    """
+    <style>
+    .block-container {
+        max-width: 1000px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 @st.cache_resource
 def load_model_and_meta():
     """모델 및 피처 메타데이터 로드 (resource 캐싱)"""
