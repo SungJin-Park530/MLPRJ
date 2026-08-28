@@ -2,6 +2,14 @@
 
 IoT 환경 센서 데이터(온도, 조도, CO2, 소리, PIR 모션 감지 등)를 기반으로 실내 재실 여부(Occupied / Not Occupied)를 예측하는 머신러닝 기반 웹 애플리케이션입니다.
 
+## 서비스 접속
+
+배포된 서비스를 아래 링크에서 바로 사용할 수 있습니다.
+
+**[IoT Occupancy Prediction 서비스 열기](https://iotmodel.streamlit.app/)**
+
+> 서비스 화면 캡처와 상세 사용 흐름은 아래 섹션에 순차적으로 추가할 예정입니다.
+
 ## 주요 기능
 
 - 다중 센서 값을 입력받아 실시간으로 재실 여부와 확률(%) 예측
@@ -11,17 +19,42 @@ IoT 환경 센서 데이터(온도, 조도, CO2, 소리, PIR 모션 감지 등)�
 
 ## 서비스 화면
 
-> 스크린샷 추가 예정
+배포 서비스는 다음 화면으로 구성되어 있습니다. 실제 화면 캡처를 준비한 뒤 이미지 경로만 교체하면 됩니다.
 
 | 실시간 예측 화면 | 모델 평가 시각화 화면 |
 | --- | --- |
-| _(이미지 추가 예정)_ | _(이미지 추가 예정)_ |
+| `docs/images/prediction-screen.png` 추가 예정 | `docs/images/evaluation-screen.png` 추가 예정 |
+
+<!--
+이미지 추가 후 아래처럼 표의 내용을 교체합니다.
+![실시간 예측 화면](docs/images/prediction-screen.png)
+![모델 평가 시각화 화면](docs/images/evaluation-screen.png)
+-->
 
 ## 시연 영상
 
-> 시연 영상(GIF 또는 링크) 추가 예정
+서비스 접속부터 센서 입력, 예측 결과 확인, 모델 평가 화면 확인까지의 전체 흐름을 담은 시연 영상입니다.
+
+> 시연 영상 파일 또는 YouTube 링크 추가 예정
+
+<!--
+YouTube 링크 추가 예시:
+[![IoT Occupancy Prediction 시연 영상](docs/images/demo-thumbnail.png)](https://www.youtube.com/watch?v=VIDEO_ID)
+-->
 
 ## 기술 스택
+
+<p>
+    <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white" alt="Python 3.10+" />
+    <img src="https://img.shields.io/badge/Streamlit-FF4B4B?logo=streamlit&logoColor=white" alt="Streamlit" />
+    <img src="https://img.shields.io/badge/scikit--learn-F7931E?logo=scikit-learn&logoColor=white" alt="scikit-learn" />
+    <img src="https://img.shields.io/badge/pandas-150458?logo=pandas&logoColor=white" alt="pandas" />
+    <img src="https://img.shields.io/badge/NumPy-013243?logo=numpy&logoColor=white" alt="NumPy" />
+    <img src="https://img.shields.io/badge/Matplotlib-11557C?logo=matplotlib&logoColor=white" alt="Matplotlib" />
+    <img src="https://img.shields.io/badge/Seaborn-4C72B0?logoColor=white" alt="Seaborn" />
+    <img src="https://img.shields.io/badge/joblib-1F6FEB?logoColor=white" alt="joblib" />
+    <img src="https://img.shields.io/badge/Jupyter-F37626?logo=jupyter&logoColor=white" alt="Jupyter" />
+</p>
 
 | 구분 | 기술 |
 | --- | --- |
